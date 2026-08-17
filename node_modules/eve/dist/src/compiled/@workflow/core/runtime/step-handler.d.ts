@@ -1,0 +1,2 @@
+export declare const stepEntrypoint: (req: Request) => Promise<Response>;
+//# sourceMappingURL=step-handler.d.ts.map

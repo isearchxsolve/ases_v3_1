@@ -131,3 +131,19 @@ Live, append-only monitoring feed. Newest entries at the bottom.
 - `python -m pytest tests\\ -m "not selenium" -q` completed in 105.32s with exit code 1: 1,979 passed, 113 failed, and 1,000 Selenium cases were deselected.
 - Root failures: `observability.metrics` is `None`; pgvector SQL tests expect the embedding at `$5::vector`; 10 design-parser generated cases expect `None` for invalid input while the unit contract expects `{}`; 100 generated failure-classifier cases expect numbered tokens and richer heuristic features.
 - Next: inspect these exact source/test contracts, fix non-contradictory production defects, and reconcile any genuinely inconsistent assertion contract without skipping, xfail, or deleting tests.
+
+### [step 27] Repaired observability, classifier, vector, and test-contract defects
+- Added a stable no-op metrics façade when Prometheus is unavailable; tokenizer now preserves numeric incident identifiers; all five classifier heuristic outputs are explicitly floats; pgvector write queries now bind embeddings at `$5::vector` consistently.
+- Reconciled the generated invalid-JSON assertion with the documented safe empty-mapping parser contract (no test was removed, skipped, or xfailed).
+- Follow-up targeted run left only 51 failures: the four empty keyword-hit sums were integers rather than floats and the design-spec pgvector write still had its embedding at `$6`; both have now been corrected.
+- Next: rerun all 285 affected observability/vector/design/classifier cases, then rerun every non-Selenium test.
+
+### [step 28] Observability, vector, design, and classifier validation passed
+- The 285 affected cases passed with exit code 0 in 16.95s, including 100 classifier stress cases, 90 design-agent contract cases, vector pgvector write/retrieval contracts, and observability fallbacks.
+- Numeric token preservation and all-float classifier vectors now make tenant-learning inputs deterministic and serializable; metrics code keeps a safe interface when the optional exporter is absent.
+- Next: rerun the complete 2,092-case non-Selenium suite.
+
+### [step 29] All non-Selenium tests passed
+- `python -m pytest tests\\ -m "not selenium" -q` completed with exit code 0: 2,092 passed, 1,000 deselected in 106.43s.
+- Every listed unit, integration, security, TDD-gate, n8n-contract, design, classifier, and generated resilience case passed; the remaining final verification is the 1,000-case real-browser group plus the same non-browser tests.
+- Next: execute the exact required `python -m pytest tests/ -v` command to completion.

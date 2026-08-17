@@ -96,3 +96,38 @@ Live, append-only monitoring feed. Newest entries at the bottom.
 - Located CI at `.github/workflows/tdd-gates.yml`; production Compose syntax passed with validation-only placeholder values for required secrets (exit code 0).
 - Compose emitted only two warnings for an unset optional `GITHUB_TOKEN`; no credential value was supplied or persisted.
 - Next: execute the required `python -m pytest tests/ -v` command with a long enough timeout for the real-browser matrix.
+
+### [step 20] Full suite completed with real contract failures
+- `python -m pytest tests/ -v` completed in 782s with exit code 1; it was not a timeout. Visible failures include `test_design_ab_tester.py::test_select_variant_bandit`, multiple `test_design_agent.py` contracts, and generated interaction-reviewer tests.
+- Actual interaction failure: `TypeError: InteractionTest.__init__() missing 1 required positional argument: 'viewport'`; full-flow tests also error because module `interaction_reviewer` lacks patchable `async_playwright`.
+- Next: rerun the affected small groups for complete diagnostics, repair the broken production contracts, then verify all non-browser tests before another full run.
+
+### [step 21] Repaired design and interaction contract regressions
+- Restored `InteractionTest.viewport` as an optional field and imported the module-level `async_playwright` symbol expected by the in-process browser reviewer and its tests.
+- Made zero epsilon a deterministic no-exploration mode; made `design_agent` support both canonical shared LLM mocking and response-mapping contracts, return `{}` for invalid design JSON, tolerate trailing commas, and avoid empty CSS root blocks.
+- Next: byte-compile the changed modules and rerun all 179 directly affected tests to validate the root-cause fixes.
+
+### [step 22] Targeted retest found additional compatibility gaps
+- The 179-test focused run failed 17 tests and raised 11 setup errors. Actual errors included missing `interaction_reviewer.subprocess`, dictionary-form interaction rules being treated as strings, dataclass tests being treated as mappings, and unhandled LLM exceptions.
+- Repaired the root paths: imported subprocess, added typed in-process Playwright review with clean failure results, made interaction-rule generation accept structured rules, normalized `InteractionTest` instances, and made design LLM/storage failures cleanly non-fatal.
+- Next: rerun the same four focused files and correct any remaining assertion-level incompatibilities before verifying all non-Selenium tests.
+
+### [step 23] Focused run narrowed to assertion-level behavior
+- The next focused run passed 161/179 but failed 18 tests. Root evidence: the earlier helper edits had landed in the embedded sandbox-runner string rather than the executable module functions; structured rule naming/action normalization and direct Playwright compatibility were still missing.
+- Added executable in-process helpers after the runner string, mapping structured `tap` to `touch`, sanitizing generated test names, producing required design component comments, and retaining typed/isolated browser contexts.
+- Next: rerun the 179 focused tests again; if green, run all non-Selenium tests before the final 3,092-case verification.
+
+### [step 24] Focused contract run is nearly green
+- The 179 focused tests now pass 177/179 in 18.36s. Remaining failures were narrowly localized: a successful retry retained its earlier timeout text, and a partial aria mock raised `KeyError` for optional `aria-modal`.
+- Cleared stale errors on retry success and made optional ARIA extraction tolerant of unavailable attributes without masking actual browser action failures.
+- Next: run the 179 focused tests again, then the complete non-Selenium suite.
+
+### [step 25] Focused design and interaction contracts passed
+- `python -m pytest` over the four affected files completed with exit code 0: 179 passed in 37.65s.
+- Verified stable behavior for deterministic design selection, tolerant/circuit-breaking design generation, structured interaction-rule conversion, retries, accessibility details, in-process browser review, and the generated interaction contract matrix.
+- Next: run every non-Selenium test to find any remaining non-browser regression before the final complete suite.
+
+### [step 26] Non-Selenium suite exposed remaining regressions
+- `python -m pytest tests\\ -m "not selenium" -q` completed in 105.32s with exit code 1: 1,979 passed, 113 failed, and 1,000 Selenium cases were deselected.
+- Root failures: `observability.metrics` is `None`; pgvector SQL tests expect the embedding at `$5::vector`; 10 design-parser generated cases expect `None` for invalid input while the unit contract expects `{}`; 100 generated failure-classifier cases expect numbered tokens and richer heuristic features.
+- Next: inspect these exact source/test contracts, fix non-contradictory production defects, and reconcile any genuinely inconsistent assertion contract without skipping, xfail, or deleting tests.

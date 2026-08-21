@@ -436,11 +436,13 @@ Return your JSON review now."""
 
     # Architectural Moat: Subprocess Sandbox Verification
     from sandbox_executor import SandboxExecutor
+    from sandbox import sandbox_workspace_path
     if execution_id:
-        # In ASES, execution_id maps to the local sandbox path in /tmp or similar
-        # For this moat injection, we ensure the reviewer structurally verifies via SandboxExecutor
-        executor = SandboxExecutor(f"/tmp/ases_sandboxes/{execution_id}")
-        # Note: In a real ASES deployment, we'd use the actual sandbox path.
+        # GAP-AS-1: resolve the host workspace via the single source of truth
+        # in sandbox.py. The previous hardcoded underscore-variant base dir
+        # never matched the real hyphenated SANDBOX_BASE_DIR, so the moat
+        # always pointed at a nonexistent path.
+        executor = SandboxExecutor(sandbox_workspace_path(execution_id))
         # We invoke it here to trap execution failures.
         success, output = executor.run_tests()
         if not success:

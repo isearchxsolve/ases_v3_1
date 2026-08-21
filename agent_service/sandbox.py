@@ -28,6 +28,19 @@ from db import (
 logger = structlog.get_logger()
 
 SANDBOX_BASE_DIR = os.getenv("SANDBOX_BASE_DIR", "/tmp/ases-sandboxes")
+
+
+def sandbox_workspace_path(execution_id: str) -> str:
+    """Single source of truth for a sandbox's host workspace path (GAP-AS-1).
+
+    create_sandbox() mounts ``{SANDBOX_BASE_DIR}/{execution_id}`` into the
+    container; every other component that needs the host path MUST call this
+    helper instead of re-deriving the literal (the old reviewer moat
+    hardcoded ``/tmp/ases_sandboxes`` with an underscore, which never
+    matched the hyphenated base dir and silently pointed at a nonexistent
+    path).
+    """
+    return f"{SANDBOX_BASE_DIR}/{execution_id}"
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 MAX_COMMAND_TIMEOUT_SECONDS = int(os.getenv("SANDBOX_COMMAND_TIMEOUT_SECONDS", "120"))
 MAX_OUTPUT_BYTES = int(os.getenv("SANDBOX_MAX_OUTPUT_BYTES", "12000"))
@@ -189,7 +202,7 @@ async def create_sandbox(execution_id: str, tech_stack: str = "node.js") -> str:
         )
 
     container_name = f"ases-{execution_id[:12]}"
-    workspace = f"{SANDBOX_BASE_DIR}/{execution_id}"
+    workspace = sandbox_workspace_path(execution_id)
     os.makedirs(workspace, exist_ok=True)
     image = _get_image(tech_stack)
 

@@ -247,6 +247,7 @@ FILE: <filepath>
 16. CSS: CSS variables for theming, container queries, modern layout (Grid/Flex), no !important
 17. Observability: OpenTelemetry tracing, Prometheus metrics, structured JSON logs
 18. Deployment-ready: Dockerfile, health checks, env config, CI/CD pipeline
+19. BACKEND REQUIREMENT (THE HARDENING): You MUST ensure the backend is fully hardened. Implement defensive programming, strict thread safety (using locks where needed), comprehensive input validation, and proper error boundaries.
 
 STACK-SPECIFIC SOTA REQUIREMENTS:
 - React 18+: Server Components, useActionState, useOptimistic, React Compiler ready
@@ -432,6 +433,26 @@ Return your JSON review now."""
         execution_id=execution_id,
         call_type="reviewer",
     )
+
+    # Architectural Moat: Subprocess Sandbox Verification
+    from sandbox_executor import SandboxExecutor
+    if execution_id:
+        # In ASES, execution_id maps to the local sandbox path in /tmp or similar
+        # For this moat injection, we ensure the reviewer structurally verifies via SandboxExecutor
+        executor = SandboxExecutor(f"/tmp/ases_sandboxes/{execution_id}")
+        # Note: In a real ASES deployment, we'd use the actual sandbox path.
+        # We invoke it here to trap execution failures.
+        success, output = executor.run_tests()
+        if not success:
+            return {
+                "review": {
+                    "approved": False,
+                    "issues": [{"file": "tests", "line": "0", "severity": "high", "description": f"SandboxExecutor Pipeline Failed: {output}"}],
+                    "severity": "high",
+                    "summary": "Sandbox execution verification failed."
+                },
+                "tokens": inp_tok + out_tok
+            }
 
     try:
         review = json.loads(content)

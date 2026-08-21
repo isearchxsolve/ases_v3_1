@@ -26,3 +26,46 @@ verify → fix → test → log → commit.
   tests/test_sandbox.py (existing): 9 passed in 0.65s
   ```
 - **Commit:** (with this entry)
+
+### [2026-08-22 07:50] GAP-AS-2 — visual reviewer approves on its own failure — FIXED (fail closed)
+
+- **Repro (pre-fix):** `visual_reviewer.py::_visual_skip()` returned
+  `{"approved": True}` and was used for EVERY failure path: screenshot capture failed
+  (line 160), screenshot file missing (164), unparseable LLM response (229), LLM call
+  exception (256). Additionally `approved = bool(review.get("approved", True))` defaulted
+  a MISSING verdict key to approved. Worse: the screenshot command
+  `python .ases_screenshot.py '<url>' '<path>'` was never in sandbox.ALLOWED_COMMANDS, so
+  `run_command` raised ValueError on every attempt — the gate could literally never
+  succeed, and every attempt fell into the approved=True skip. Net effect: the visual
+  crown jewel always "approved" without ever looking.
+- **Fix:**
+  1. `visual_reviewer.py`: split `_visual_skip` (POLICY skip — last-mile cost gate,
+     legitimately not reviewing this iteration; now flagged `skipped: True`) from new
+     `_visual_failure` (the gate TRIED and could not verify → `approved: False`,
+     severity-high issue, blocking issues_text). All four failure paths now call
+     `_visual_failure`. Missing `approved` key now defaults to False.
+  2. Escape hatch: `TenantConfig.visual_review_optional` (default False). Only an explicit
+     tenant opt-out converts a gate failure into a loud `skipped` pass — never silent.
+  3. Allowlist repair: the screenshot script now reads its URL from a workspace file
+     (`.ases_shot_url`) instead of argv, making the executed command the constant string
+     `python .ases_screenshot.py`; that plus the three dev-server start commands are added
+     to `sandbox.ALLOWED_COMMANDS` (constant strings from visual_reviewer.py, never
+     user/model input — no attack-surface widening). ValueError from run_command is now
+     caught and fails closed instead of crashing the loop.
+  4. `models.py`: `visual_review_optional: bool = False` field with rationale comment.
+- **New tests:** `tests/test_visual_gate_fail_closed.py` (8 cases): _visual_failure fails
+  closed by default; explicit optional opt-out passes with skipped flag; policy skip is a
+  distinct shape; screenshot failure fails closed end-to-end through visual_reviewer();
+  allowlist rejection fails closed; missing approved key defaults to reject; all four
+  visual commands present in ALLOWED_COMMANDS; screenshot script has no sys.argv.
+- **Test output (verbatim):**
+  ```
+  tests/test_visual_gate_fail_closed.py: 8 passed in 0.60s
+  related sweep (visual/reviewer/sandbox/model): 363 passed, 2743 deselected in 62.10s
+  ```
+  Pre-existing test_visual_reviewer.py and test_zprod_visual_reviewer.py remain green.
+- **Residual (honest):** a real screenshot round-trip still needs Playwright/chromium
+  baked into the sandbox images (node:18-alpine / python:3.12-slim don't ship it) and a
+  network exception for npm. Until then, frontend jobs on default config will fail closed
+  at the visual gate — which is the CORRECT behavior; the images are the follow-up.
+- **Commit:** (with this entry)

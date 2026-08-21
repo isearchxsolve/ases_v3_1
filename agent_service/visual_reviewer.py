@@ -53,8 +53,11 @@ DEV_SERVER_COMMANDS = {
 
 SCREENSHOT_SCRIPT = """
 import asyncio
+from pathlib import Path
 from playwright.async_api import async_playwright
-import sys
+
+URL_FILE = "/workspace/.ases_shot_url"
+OUT_PATH = "/workspace/.ases_shot.png"
 
 async def shoot(url, out_path):
     async with async_playwright() as p:
@@ -67,7 +70,9 @@ async def shoot(url, out_path):
         await page.screenshot(path=out_path, full_page=False)
         await browser.close()
 
-asyncio.run(shoot(sys.argv[1], sys.argv[2]))
+# URL comes from a file (not argv) so the sandbox command stays a fixed
+# allowlist string — GAP-AS-2.
+asyncio.run(shoot(Path(URL_FILE).read_text().strip(), OUT_PATH))
 """
 
 # Last-mile gate constants
@@ -142,26 +147,38 @@ async def visual_reviewer(
     write_file(sandbox_id, ".ases_screenshot.py", SCREENSHOT_SCRIPT)
 
     if dev_cmd:
-        await run_command(sandbox_id, dev_cmd, timeout=60)
+        try:
+            await run_command(sandbox_id, dev_cmd, timeout=60)
+        except ValueError as e:
+            # dev command not on the sandbox allowlist (or --network none
+            # blocks npm) — the gate cannot verify, fail closed (GAP-AS-2).
+            return _visual_failure(f"dev server command rejected: {e}", config)
         await asyncio.sleep(8)
 
     screenshot_path = "/workspace/.ases_shot.png"
     url = f"http://localhost:{port}" if dev_cmd else "file:///workspace/index.html"
+    # Pass the URL via file so the executed command is a fixed allowlist
+    # string (GAP-AS-2).
+    write_file(sandbox_id, ".ases_shot_url", url)
 
-    shot_result = await run_command(
-        sandbox_id,
-        f"python .ases_screenshot.py '{url}' '{screenshot_path}'",
-        timeout=30,
-    )
+    try:
+        shot_result = await run_command(
+            sandbox_id,
+            "python .ases_screenshot.py",
+            timeout=30,
+        )
+    except ValueError as e:
+        return _visual_failure(f"screenshot command rejected: {e}", config)
 
     if not shot_result["success"]:
         logger.warning("visual_reviewer.screenshot_failed", execution_id=execution_id,
                        stderr=shot_result["stderr"][:300])
-        return _visual_skip("Screenshot capture failed — skipping visual review")
+        return _visual_failure(
+            f"Screenshot capture failed: {shot_result['stderr'][:200]}", config)
 
     screenshot_b64 = _read_sandbox_file_b64(sandbox_id, screenshot_path)
     if not screenshot_b64:
-        return _visual_skip("Screenshot file not found after capture")
+        return _visual_failure("Screenshot file not found after capture", config)
 
     try:
         import openai
@@ -226,9 +243,9 @@ approved=true ONLY if:
         review = _parse_json_safe(raw)
 
         if not review:
-            return _visual_skip("Visual review response could not be parsed")
+            return _visual_failure("Visual review response could not be parsed", config)
 
-        approved = bool(review.get("approved", True))
+        approved = bool(review.get("approved", False))
         issues = review.get("issues", [])
 
         issues_text = ""
@@ -245,6 +262,7 @@ approved=true ONLY if:
 
         return {
             "approved": approved,
+            "skipped": False,
             "issues": issues,
             "issues_text": issues_text,
             "screenshot_b64": screenshot_b64,
@@ -253,7 +271,7 @@ approved=true ONLY if:
 
     except Exception as e:
         logger.warning("visual_reviewer.llm_failed", execution_id=execution_id, error=str(e))
-        return _visual_skip(f"Visual LLM call failed: {e}")
+        return _visual_failure(f"Visual LLM call failed: {e}", config)
 
 
 def _read_sandbox_file_b64(sandbox_id: str, container_path: str) -> Optional[str]:
@@ -271,8 +289,41 @@ def _read_sandbox_file_b64(sandbox_id: str, container_path: str) -> Optional[str
 
 
 def _visual_skip(reason: str) -> Dict[str, Any]:
+    """POLICY skip (last-mile cost gate): visual review deliberately did not
+    run this iteration. Not a failure — the job gets more iterations to reach
+    the last mile. Marked skipped=True so callers can distinguish it from a
+    real review verdict."""
     logger.info("visual_reviewer.skipped", reason=reason)
-    return {"approved": True, "issues": [], "issues_text": "", "screenshot_b64": None, "tokens": 0}
+    return {"approved": True, "skipped": True, "issues": [], "issues_text": "",
+            "screenshot_b64": None, "tokens": 0}
+
+
+def _visual_failure(reason: str, config=None) -> Dict[str, Any]:
+    """GAP-AS-2: the visual gate TRIED and could not verify the UI. That is a
+    failure, never an approval — unless the tenant explicitly declared
+    visual_review_optional=True (e.g. no provisioned Playwright image yet).
+    The old code returned approved=True here, which silently shipped
+    unverified (possibly broken) UI."""
+    optional = bool(getattr(config, "visual_review_optional", False))
+    if optional:
+        logger.warning("visual_reviewer.unavailable_optional", reason=reason)
+        return {"approved": True, "skipped": True, "issues": [],
+                "issues_text": f"Visual gate unavailable (optional): {reason}",
+                "screenshot_b64": None, "tokens": 0}
+    logger.error("visual_reviewer.fail_closed", reason=reason)
+    return {
+        "approved": False,
+        "skipped": False,
+        "issues": [{"severity": "high",
+                    "description": f"Visual gate could not verify the UI: {reason}"}],
+        "issues_text": (
+            "VISUAL REVIEW FAILED — the gate could not verify the UI "
+            f"({reason}). Fail closed: fix the visual pipeline or re-run; "
+            "do not ship unverified UI."
+        ),
+        "screenshot_b64": None,
+        "tokens": 0,
+    }
 
 
 def _parse_json_safe(content: str) -> Dict:

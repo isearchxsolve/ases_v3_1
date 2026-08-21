@@ -98,6 +98,13 @@ ALLOWED_COMMANDS = frozenset({
     "python manage.py test",
     "go test ./...",
     "cargo test",
+    # GAP-AS-2: fixed visual-gate commands (dev servers + screenshot capture).
+    # These are constant strings emitted by visual_reviewer.py, never user or
+    # model input, so allowlisting them does not widen the attack surface.
+    "npm install --prefer-offline 2>&1 && npm start &",
+    "npm install --prefer-offline 2>&1 && npm run dev &",
+    "npm install --prefer-offline 2>&1 && npm run serve &",
+    "python .ases_screenshot.py",
 })
 
 

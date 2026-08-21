@@ -18,6 +18,12 @@ class TenantConfig(BaseModel):
     cost_limit_usd: float = 1.00   # hard ceiling per job; overridable per-request
     require_clarity: bool = False  # block underspecified jobs
     clarity_threshold: float = 5.0  # 0-10 threshold to trigger questions
+    # GAP-AS-2: when the visual gate cannot run (no Playwright/chromium in the
+    # sandbox image, no network for npm, LLM/parse failure), it now FAILS
+    # CLOSED (approved=False) instead of silently approving. A tenant that
+    # genuinely cannot provision visual review may opt out explicitly; the
+    # default keeps the gate blocking so broken UI is never shipped green.
+    visual_review_optional: bool = False
     allowed_stacks: List[str] = Field(default_factory=lambda: [
         "Node.js", "Python", "React", "Next.js", "FastAPI", "Express"
     ])

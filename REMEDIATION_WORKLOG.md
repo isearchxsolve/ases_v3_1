@@ -96,3 +96,30 @@ verify → fix → test → log → commit.
 - **Policy note:** the mocked suite stays for unit speed but is no longer the release
   gate; `-m e2e` is.
 - **Commit:** (with this entry)
+
+### [2026-08-22 08:40] GAP-AS-4 — mobile_stacks.py dead code (capability claim the product couldn't honor) — FIXED (wired)
+
+- **Repro (pre-fix):** `agent_service/mobile_stacks.py` (293 lines) defined
+  MOBILE_STACK_IMAGES / MOBILE_STACK_TEST_COMMANDS / dev+build commands for RN, Expo,
+  Flutter, iOS, Android — but `grep -rn mobile_stacks` found exactly ONE reference: a
+  mention in AUDIT_REPORT.md. Imported nowhere. The planner's allowed_stacks offered only
+  web stacks. A monetization-facing product claiming mobile support it could not deliver.
+- **Fix (wire, not delete — the data is correct and complete):**
+  1. `sandbox.py`: `STACK_IMAGES.update(MOBILE_STACK_IMAGES)` and
+     `STACK_TEST_COMMANDS.update(MOBILE_STACK_TEST_COMMANDS)`, both placed BEFORE
+     `ALLOWED_COMMANDS = frozenset({*STACK_TEST_COMMANDS.values(), ...})` so mobile test
+     commands are executable through the same allowlisted path (verified: flutter/expo/
+     android commands all present in ALLOWED_COMMANDS).
+  2. `models.py`: TenantConfig.allowed_stacks now offers "React Native", "Expo",
+     "Flutter", "Android" to the planner. iOS deliberately excluded from the default
+     offer: its image needs a macOS runner (documented limitation, enforced at deploy).
+- **New tests:** `tests/test_mobile_stacks_wired.py` (4 cases): mobile images resolve via
+  _get_image; mobile test commands resolve AND are allowlisted; planner offers the mobile
+  stacks; web-stack defaults not clobbered by the merge.
+- **Test output (verbatim):**
+  ```
+  tests/test_mobile_stacks_wired.py: 4 passed in 0.57s
+  full remediation sweep (sandbox, path, visual, e2e, mobile, executor-security):
+  54 passed, 1 skipped in 21.90s   (skip = AS-3 container tier, daemon down)
+  ```
+- **Commit:** (with this entry)

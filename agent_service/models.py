@@ -25,7 +25,11 @@ class TenantConfig(BaseModel):
     # default keeps the gate blocking so broken UI is never shipped green.
     visual_review_optional: bool = False
     allowed_stacks: List[str] = Field(default_factory=lambda: [
-        "Node.js", "Python", "React", "Next.js", "FastAPI", "Express"
+        "Node.js", "Python", "React", "Next.js", "FastAPI", "Express",
+        # GAP-AS-4: mobile stacks are now real (wired into sandbox maps),
+        # so the planner may offer them. iOS builds still require a macOS
+        # runner — documented limitation, enforced at deploy time.
+        "React Native", "Expo", "Flutter", "Android",
     ])
 
 

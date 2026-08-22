@@ -67,6 +67,12 @@ STACK_IMAGES = {
     "default":   "node:18-alpine",
 }
 
+# GAP-AS-4: mobile stacks were defined in mobile_stacks.py but imported
+# nowhere — a dead capability claim. They are now merged into the live
+# sandbox maps so the planner/sandbox actually resolve them.
+from mobile_stacks import MOBILE_STACK_IMAGES, MOBILE_STACK_TEST_COMMANDS  # noqa: E402
+STACK_IMAGES.update(MOBILE_STACK_IMAGES)
+
 # Stack -> install + test command
 STACK_TEST_COMMANDS = {
     "node.js":   "npm install --prefer-offline 2>&1 && npm test 2>&1",
@@ -82,6 +88,10 @@ STACK_TEST_COMMANDS = {
     "rust":      "cargo test 2>&1",
     "default":   "npm install --prefer-offline 2>&1 && npm test 2>&1",
 }
+
+# GAP-AS-4: merge mobile test commands BEFORE ALLOWED_COMMANDS is derived so
+# the mobile stacks are executable through the same allowlisted path.
+STACK_TEST_COMMANDS.update(MOBILE_STACK_TEST_COMMANDS)
 
 # Commands passed to ``docker exec`` are deliberately not user controlled.
 # The allowlist is built from the fixed per-stack test commands and includes
